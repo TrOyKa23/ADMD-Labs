@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 
+import 'models/user.dart';
+import 'models/bank_account.dart';
+import 'models/book.dart';
+import 'models/magazine.dart';
+import 'models/library.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -11,7 +17,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ADMD Lab 1',
+      title: 'ADMD Lab 2',
       theme: ThemeData(
         // This is the theme of your application.
         //
@@ -28,9 +34,10 @@ class MyApp extends StatelessWidget {
         //
         // This works for code too, not just values: Most code changes can be
         // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'ADMD Lab 1'),
+      home: const MyHomePage(title: 'ADMD Lab 2'),
     );
   }
 }
@@ -55,6 +62,57 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
+
+  // Task I: create users with nullable fields.
+  final List<User> _users = [
+    const User(name: 'Alice', age: 21, email: 'alice@example.com'),
+    const User(name: 'Bob', age: 19),
+    const User(name: 'Charlie'),
+  ];
+
+  // Task II: demonstrate initialized and uninitialized account numbers.
+  late final List<BankAccount> _accounts = [
+    BankAccount(holderName: 'Alice', balance: 1250.50, bankBranch: 'Bucharest')
+      ..initializeAccount('RO001'),
+    BankAccount(holderName: 'Bob', balance: 500.00, bankBranch: 'Cluj')
+      ..initializeAccount('RO002'),
+    BankAccount(holderName: 'Charlie'),
+  ];
+
+  // Task III: create a library and add books and magazines.
+  late final Library _library = _createLibrary();
+
+  Library _createLibrary() {
+    final library = Library();
+
+    final book = Book(
+      title: 'Clean Code',
+      author: 'Robert C. Martin',
+      publishDate: DateTime(2008, 8, 1),
+      pageCount: 464,
+      isbn: '9780132350884',
+    );
+
+    final magazine = Magazine(
+      title: 'Science Monthly',
+      author: 'Editorial Team',
+      publishDate: DateTime.now().subtract(const Duration(days: 30)),
+      issueNumber: 12,
+      publisher: 'Science Press',
+    );
+
+    library.addItem(book);
+    library.addItem(magazine);
+
+    // Demonstrate borrowing a book.
+    library.borrowItem(
+      book,
+      _users[0],
+      DateTime.now().add(const Duration(days: 14)),
+    );
+
+    return library;
+  }
 
   void _incrementCounter() {
     setState(() {
@@ -85,32 +143,110 @@ class _MyHomePageState extends State<MyHomePage> {
         // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Task I: Users
+          Text('Task I — Users', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 8),
+
+          ..._users.map(
+            (user) => Card(
+              child: ListTile(
+                leading: const Icon(Icons.person),
+                title: Text(user.name),
+                subtitle: Text(
+                  'Age: ${user.getDisplayAge()}\n'
+                  'Email: ${user.email ?? 'Not provided'}',
+                ),
+                isThreeLine: true,
+              ),
             ),
-          ],
-        ),
+          ),
+
+          const Divider(height: 32),
+
+          // Task II: Bank accounts
+          Text(
+            'Task II — Bank Accounts',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+
+          ..._accounts.map(
+            (account) => Card(
+              child: ListTile(
+                leading: const Icon(Icons.account_balance),
+                title: Text(account.holderName),
+                subtitle: Text(
+                  'Number: ${account.getDisplayAccountNumber()}\n'
+                  'Balance: ${account.balance.toStringAsFixed(2)}\n'
+                  'Branch: ${account.bankBranch ?? 'Not specified'}',
+                ),
+                isThreeLine: true,
+              ),
+            ),
+          ),
+
+          const Divider(height: 32),
+
+          // Task III: Library
+          Text(
+            'Task III — Library',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+
+          ..._library.items.map(
+            (item) => Card(
+              child: ListTile(
+                leading: Icon(item is Book ? Icons.menu_book : Icons.newspaper),
+                title: Text(item.title),
+                subtitle: Text(
+                  'Author: ${item.author ?? 'Not specified'}\n'
+                  'Published: ${item.publishDate?.year ?? 'Unknown'}\n'
+                  'Status: ${item.isBorrowed ? 'Borrowed by ${item.borrower!.name}' : 'Available'}',
+                ),
+                isThreeLine: true,
+                trailing: item is Book
+                    ? Text('${item.pageCount ?? '?'} pages')
+                    : Text('Issue ${(item as Magazine).issueNumber ?? '?'}'),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          Text(
+            'Library search',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          Text(
+            'Search for "Clean": '
+            '${_library.searchByTitle('Clean').length} result(s)',
+          ),
+          Text(
+            'Recent publications: '
+            '${_library.getRecentItems().length}',
+          ),
+
+          const Divider(height: 32),
+
+          // Original counter functionality
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('You have pushed the button this many times:'),
+                Text(
+                  '$_counter',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 80),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _incrementCounter,
