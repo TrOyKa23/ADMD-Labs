@@ -5,6 +5,7 @@ import 'models/bank_account.dart';
 import 'models/book.dart';
 import 'models/magazine.dart';
 import 'models/library.dart';
+import 'screens/todo_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -37,7 +38,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'ADMD Lab 2'),
+      home: const TodoScreen(),
     );
   }
 }
