@@ -1,30 +1,34 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-import 'package:lab1_app/main.dart';
+import 'package:lab1_app/models/todo.dart';
+import 'package:lab1_app/screens/todo_screen.dart';
+import 'package:lab1_app/todos/todo_repository.dart';
+import 'package:lab1_app/todos/bloc/todo_bloc.dart';
+
+class FakeTodoRepository implements TodoRepository {
+  @override
+  Future<List<Todo>> fetchTodos() async {
+    return [
+      const Todo(userId: 1, id: 1, title: 'Learn Flutter', completed: false),
+    ];
+  }
+}
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('TodoScreen displays todos', (WidgetTester tester) async {
+    final repository = FakeTodoRepository();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider(
+          create: (_) => TodoBloc(repository),
+          child: const TodoScreen(),
+        ),
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('0 / 0 completed'), findsOneWidget);
   });
 }
