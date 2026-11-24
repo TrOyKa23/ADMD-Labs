@@ -1,218 +1,299 @@
 import 'package:flutter/material.dart';
 
-class Todo {
-  Todo(this.title)
-    : id = DateTime.now().microsecondsSinceEpoch,
-      done = ValueNotifier<bool>(false);
-
-  final int id;
-  final String title;
-  final ValueNotifier<bool> done;
-
-  void dispose() {
-    done.dispose();
-  }
-}
+import '../api/todo_api.dart';
+import '../models/todo.dart';
 
 class TodoScreen extends StatefulWidget {
   const TodoScreen({super.key});
 
   @override
-  State<TodoScreen> createState() => _TodoState();
+  State<TodoScreen> createState() => _TodoScreenState();
 }
 
-class _TodoState extends State<TodoScreen> {
-  final List<Todo> _items = [];
-  final TextEditingController _input = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
+class _TodoScreenState extends State<TodoScreen> {
+  late final TodoApi _api;
 
-  void _add() {
-    final title = _input.text.trim();
+  List<Todo> _items = [];
+  final Set<int> _completedIds = {};
 
-    if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a task title.')),
-      );
-      return;
-    }
+  final List<String> _logs = [];
+
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _api = TodoApi(onLog: _addLog);
+
+    _testEquality();
+
+    _loadTodos();
+  }
+
+  void _addLog(String message) {
+    if (!mounted) return;
 
     setState(() {
-      _items.add(Todo(title));
-    });
+      _logs.add(
+        '${DateTime.now().toLocal().toString().substring(11, 19)}  $message',
+      );
 
-    _input.clear();
-
-    // Scroll to the newly added task after the list rebuilds.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
+      // Keep only the latest 30 log entries.
+      if (_logs.length > 30) {
+        _logs.removeAt(0);
       }
     });
   }
 
-  void _remove(Todo todo) {
-    final index = _items.indexWhere((item) => item.id == todo.id);
+  // Task 1 — Test Equatable
+  void _testEquality() {
+    const a = Todo(userId: 1, id: 10, title: 'Learn Flutter', completed: false);
 
-    if (index == -1) return;
+    const b = Todo(userId: 1, id: 10, title: 'Learn Flutter', completed: false);
 
+    debugPrint('Task 1 — Are a and b equal? ${a == b}');
+  }
+
+  Future<void> _loadTodos() async {
     setState(() {
-      _items.removeWhere((item) => item.id == todo.id);
+      _isLoading = true;
+      _error = null;
     });
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('"${todo.title}" deleted'),
-          action: SnackBarAction(
-            label: 'UNDO',
-            onPressed: () {
-              if (!mounted) return;
+    try {
+      final todos = await _api.fetchTodos();
 
-              setState(() {
-                final safeIndex = index.clamp(0, _items.length);
-                _items.insert(safeIndex, todo);
-              });
-            },
-          ),
-          duration: const Duration(seconds: 4),
-        ),
-      );
+      if (!mounted) return;
+
+      setState(() {
+        _items = todos;
+
+        _completedIds
+          ..clear()
+          ..addAll(
+            todos.where((todo) => todo.completed).map((todo) => todo.id),
+          );
+
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _error = error.toString();
+        _isLoading = false;
+      });
+    }
   }
 
-  int get _completedCount {
-    var count = 0;
-
-    for (var i = 0; i < _items.length; i++) {
-      count += _items[i].done.value ? 1 : 0;
-    }
-
-    return count;
+  Future<void> _testRetry() async {
+    await _api.testInvalidPath();
   }
 
-  @override
-  void dispose() {
-    _input.dispose();
-    _scrollController.dispose();
-
-    for (final todo in _items) {
-      todo.dispose();
-    }
-
-    super.dispose();
+  void _toggleTodo(Todo todo, bool value) {
+    setState(() {
+      if (value) {
+        _completedIds.add(todo.id);
+      } else {
+        _completedIds.remove(todo.id);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final completedCount = _completedIds.length;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Lab 3 — To-do List'),
+        title: const Text('ADMD Lab 4 — Networking'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            onPressed: _loadTodos,
+            tooltip: 'Reload todos',
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(
-              controller: _input,
-              decoration: InputDecoration(
-                labelText: 'New task',
-                hintText: 'Enter a task...',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  onPressed: _add,
-                  tooltip: 'Add task',
-                  icon: const Icon(Icons.add),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Todos from JSONPlaceholder',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                Text('$completedCount / ${_items.length} completed'),
+              ],
+            ),
+          ),
+
+          if (_isLoading)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else if (_error != null)
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: Colors.red,
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('Could not load todos'),
+                      const SizedBox(height: 8),
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _loadTodos,
+                        child: const Text('Try again'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              onSubmitted: (_) => _add(),
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Completed: $_completedCount / ${_items.length}',
-                style: Theme.of(context).textTheme.titleMedium,
+            )
+          else
+            Expanded(
+              child: ListView.builder(
+                itemCount: _items.length,
+                itemBuilder: (context, index) {
+                  final todo = _items[index];
+
+                  return TodoTile(
+                    todo: todo,
+                    completed: _completedIds.contains(todo.id),
+                    onChanged: (value) {
+                      _toggleTodo(todo, value);
+                    },
+                  );
+                },
               ),
             ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: _items.isEmpty
-                  ? const Center(
-                      child: Text('No tasks yet. Add your first task above!'),
-                    )
-                  : ListView.builder(
-                      controller: _scrollController,
-                      itemCount: _items.length,
-                      itemBuilder: (context, index) {
-                        final todo = _items[index];
 
-                        return Dismissible(
-                          key: ValueKey(todo.id),
-                          direction: DismissDirection.endToStart,
-                          background: Container(
-                            alignment: Alignment.centerRight,
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.delete,
-                              color: Colors.white,
-                            ),
-                          ),
-                          onDismissed: (_) => _remove(todo),
-                          child: TodoTile(todo: todo),
-                        );
-                      },
-                    ),
+          const Divider(height: 1),
+
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Retry demonstration',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _testRetry,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Test /nope'),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _add,
-        tooltip: 'Add task',
-        child: const Icon(Icons.add),
+          ),
+
+          Container(
+            height: 180,
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.terminal, size: 18),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Retry log',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _logs.clear();
+                        });
+                      },
+                      child: const Text('Clear'),
+                    ),
+                  ],
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: _logs.isEmpty
+                      ? const Center(child: Text('No requests yet'))
+                      : ListView.builder(
+                          itemCount: _logs.length,
+                          itemBuilder: (context, index) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Text(
+                                _logs[index],
+                                style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 11,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
 class TodoTile extends StatelessWidget {
-  const TodoTile({super.key, required this.todo});
+  const TodoTile({
+    super.key,
+    required this.todo,
+    required this.completed,
+    required this.onChanged,
+  });
 
   final Todo todo;
+  final bool completed;
+  final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: ValueListenableBuilder<bool>(
-        valueListenable: todo.done,
-        builder: (context, isDone, child) {
-          return CheckboxListTile(
-            value: isDone,
-            onChanged: (value) {
-              todo.done.value = value ?? false;
-            },
-            title: Text(
-              todo.title,
-              style: TextStyle(
-                decoration: isDone
-                    ? TextDecoration.lineThrough
-                    : TextDecoration.none,
-                color: isDone ? Colors.grey : null,
-              ),
-            ),
-            controlAffinity: ListTileControlAffinity.leading,
-          );
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: CheckboxListTile(
+        value: completed,
+        onChanged: (value) {
+          onChanged(value ?? false);
         },
+        title: Text(
+          todo.title,
+          style: TextStyle(
+            decoration: completed
+                ? TextDecoration.lineThrough
+                : TextDecoration.none,
+          ),
+        ),
+        subtitle: Text('Task ID: ${todo.id} · User ID: ${todo.userId}'),
+        controlAffinity: ListTileControlAffinity.leading,
       ),
     );
   }
